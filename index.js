@@ -36,7 +36,7 @@ app.get('/api/alanbase', async (req, res) => {
     const token = await getAccessToken();
 
     const response = await axios.post(
-      'https://www.zohoapis.com/crm/v2/Leads',
+      'https://www.zohoapis.eu/crm/v2/Leads',
       {
         data: [
           {
