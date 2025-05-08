@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 async function getAccessToken() {
   try {
     const response = await axios.post(
-      'https://accounts.zoho.com/oauth/v2/token',
+      'https://accounts.zoho.eu/oauth/v2/token',
       null,
       {
         params: {
