@@ -22,6 +22,8 @@ async function getAccessToken() {
       }
     );
     return response.data.access_token;
+    console.log('Access Token:', response.data.access_token);
+
   } catch (error) {
     console.error('Ошибка при получении access token:', error.response?.data || error.message);
     throw new Error('Ошибка обновления токена');
@@ -63,7 +65,7 @@ app.get('/api/alanbase', async (req, res) => {
       },
       {
         headers: {
-          Authorization: `Zoho-oauthtoken ${token}`
+          Authorization: 'Zoho-oauthtoken ' + token
         }
       }
     );
