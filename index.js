@@ -14,9 +14,9 @@ async function getAccessToken() {
       null,
       {
         params: {
-          refresh_token: process.env.REFRESH_TOKEN,
-          client_id: process.env.CLIENT_ID,
-          client_secret: process.env.CLIENT_SECRET,
+          client_id: process.env.client_id,
+          client_secret: process.env.client_secret,
+          refresh_token: process.env.refresh_token,
           grant_type: 'refresh_token'
         }
       }
