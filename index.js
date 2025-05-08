@@ -17,7 +17,7 @@ async function getAccessToken() {
           refresh_token: process.env.REFRESH_TOKEN,
           client_id: process.env.CLIENT_ID,
           client_secret: process.env.CLIENT_SECRET,
-          grant_type: refresh_token
+          grant_type: 'refresh_token' // <--- исправлено
         }
       }
     );
@@ -30,7 +30,17 @@ async function getAccessToken() {
 
 // Основной эндпоинт для приёма постбеков
 app.get('/api/alanbase', async (req, res) => {
-  const { id, status, value, goal, currency, custom1, type, name, email } = req.query;
+  const {
+    id,
+    status,
+    amount,
+    goal,
+    currency,
+    custom1,
+    type,
+    Last_Name,
+    Email
+  } = req.query;
 
   try {
     const token = await getAccessToken();
@@ -40,14 +50,15 @@ app.get('/api/alanbase', async (req, res) => {
       {
         data: [
           {
-            Last_Name: 'name',
-            click_id: '1312344323543',
-            status: 'status',
-            FDT: '20',
-            Currency: 'USD',
-            Source: 'google',
-            type: 'registration',
-            Email: 'ematest@test.com'
+            Last_Name: Last_Name || `Postback ${id}`,
+            click_id_Alanbase: id,
+            amount: amount,
+            status: 'New',
+            FDT: value,
+            Currency: currency,
+            Source: custom1,
+            type: 'type',
+            Email: Email
           }
         ]
       },
@@ -60,7 +71,7 @@ app.get('/api/alanbase', async (req, res) => {
 
     res.json({ success: true, zoho: response.data });
   } catch (error) {
-    console.error('Ошибка создания сделки:', error?.response?.data || error.message);
+    console.error('Ошибка создания лида:', error?.response?.data || error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
