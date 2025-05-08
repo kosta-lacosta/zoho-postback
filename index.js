@@ -50,7 +50,7 @@ app.get('/api/alanbase', async (req, res) => {
         data: [
           {
             Last_Name: Last_Name || `Postback ${id}`,
-            click_id_Alanbase: id,
+            click_id_Alanbase: click_id,
             amount: amount,
             status: 'New',
             FDT: value,
