@@ -31,12 +31,11 @@ async function getAccessToken() {
 // Основной эндпоинт для приёма постбеков
 app.get('/api/alanbase', async (req, res) => {
   const {
-    id,
+    click_id,
     status,
     amount,
-    goal,
-    currency,
-    custom1,
+    Currency,
+    Source,
     type,
     Last_Name,
     Email
@@ -57,7 +56,7 @@ app.get('/api/alanbase', async (req, res) => {
             FDT: value,
             Currency: currency,
             Source: custom1,
-            type: 'type',
+            type: type,
             Email: Email
           }
         ]
