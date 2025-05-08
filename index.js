@@ -98,19 +98,20 @@ app.get('/api/alanbase', async (req, res) => {
         { headers }
       );
 
-      const deal = dealsResp.data?.data?.find(d => d.Deal_Type === 'Retention');
+      const deal = dealsResp.data?.data?.[0];
       if (!deal) throw new Error('Retention-сделка не найдена');
 
       const module = type === 'redeposit' ? 'deposits' : 'withdrawals';
-      const name = `Оплата на сумму ${amount}`;
-
+           const name = type === 'redeposit'
+        ? `Оплата на сумму ${amount}`
+        : `Вывод на сумму ${amount}`;
       const createPayment = await axios.post(
         `https://www.zohoapis.eu/crm/v2/${module}`,
         {
           data: [
             {
               Name: name,
-              amount,
+              amount: amount,
               Contact: contact.id,
               Retention: deal.id
             }
