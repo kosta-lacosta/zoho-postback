@@ -53,9 +53,9 @@ app.get('/api/alanbase', async (req, res) => {
             click_id_Alanbase: click_id,
             amount: amount,
             status: 'New',
-            FDT: value,
-            Currency: currency,
-            Source: custom1,
+            FDT: amount,
+            Currency: Currency,
+            Source: Source,
             type: type,
             Email: Email
           }
