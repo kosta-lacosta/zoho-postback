@@ -53,9 +53,9 @@ app.get('/api/alanbase', async (req, res) => {
               Last_Name: Last_Name || `Postback ${click_id}`,
               click_id_Alanbase: click_id,
               amount: amount,
-              status: 'New',
+              Lead_Status: 'New',
               Currency,
-              Source,
+              Lead_Source: Source,
               type,
               Email
             }
@@ -112,7 +112,7 @@ app.get('/api/alanbase', async (req, res) => {
             {
               Name: name,
               amount: amount,
-              Contact: contact.id,
+              contact: contact.id,
               Retention: deal.id
             }
           ]
