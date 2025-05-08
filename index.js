@@ -66,7 +66,7 @@ app.get('/api/alanbase', async (req, res) => {
       return res.json({ success: true, zoho: response.data });
     }
 
-    if (type === 'FDT') {
+    if (type === 'FTD') {
       const findLead = await axios.get(
         `https://www.zohoapis.eu/crm/v2/Leads/search?email=${Email}`,
         { headers }
@@ -78,7 +78,7 @@ app.get('/api/alanbase', async (req, res) => {
       const updateLead = await axios.put(
         'https://www.zohoapis.eu/crm/v2/Leads',
         {
-          data: [{ id: leadId, status: 'FDT' }]
+          data: [{ id: leadId, status: 'FTD' }]
         },
         { headers }
       );
