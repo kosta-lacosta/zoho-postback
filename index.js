@@ -1,71 +1,109 @@
-import express from 'express';
-import axios from 'axios';
-import dotenv from 'dotenv';
-
-dotenv.config();
+const express = require('express');
+const axios = require('axios');
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
 
+// Функция получения токена доступа
 async function getAccessToken() {
-  const response = await axios.post(
-    'https://accounts.zoho.eu/oauth/v2/token',
-    null,
-    {
-      params: {
-        client_id: '1000.PMKVL76WC40TDI4LS9Q0MOCRGIPE0A',
-        client_secret: '225bac66c839b4b48df2c5b63552bc6e37108f76bb',
-        refresh_token: '1000.eaa8b6abd9501f19a7318a3832e26d86.b7332829e917faf5db8dc1df3d24d60a',
-        grant_type: 'refresh_token'
+  try {
+    const response = await axios.post(
+      'https://accounts.zoho.eu/oauth/v2/token',
+      {
+        client_id: process.env.ZOHO_CLIENT_ID,
+        client_secret: process.env.ZOHO_CLIENT_SECRET,
+        grant_type: 'refresh_token',
+        refresh_token: process.env.ZOHO_REFRESH_TOKEN
       }
-    }
-  );
-  return response.data.access_token;
+    );
+    return response.data.access_token;
+  } catch (error) {
+    throw new Error('Ошибка получения токена: ' + error.message);
+  }
 }
 
+// Главный обработчик запроса API для Alanbase
 app.get('/api/alanbase', async (req, res) => {
-  const { type, const1, const2, amount, Currency } = req.query;
+  const {
+    click_id,     // из sub_id1
+    status,
+    amount,
+    Currency,
+    Source,
+    Last_Name,
+    Email,
+    value,
+    id,
+    custom1,      // будет использоваться как click_id при необходимости
+    goal,
+    type: rawType
+  } = req.query;
+
+  // Унификация типа события
+  let type = rawType || goal;
+  if (type === 'reg') type = 'registration';
+  if (type === 'dep') type = 'deposit';
+  if (type === 'red') type = 'redeposit';
+  if (type === 'wd')  type = 'withdrawal';
+
+  const const1 = Last_Name || `Postback ${custom1 || click_id}`;
+  const const2 = Email;
 
   try {
     const token = await getAccessToken();
     const headers = { Authorization: `Zoho-oauthtoken ${token}` };
 
-    // REGISTRATION
+    // ---------- Регистрация ----------
     if (type === 'registration') {
-      const leadsResp = await axios.get(
+      const leadResp = await axios.get(
         `https://www.zohoapis.eu/crm/v2/Leads/search?email=${const2}`,
         { headers }
       );
-      const lead = leadsResp.data?.data?.[0];
+      const lead = leadResp.data?.data?.[0];
 
       if (lead) {
         // Обновляем статус
-        await axios.put(
-          'https://www.zohoapis.eu/crm/v2/Leads',
-          { data: [{ id: lead.id, Lead_Status: 'Registered' }] },
-          { headers }
-        );
-        return res.json({ success: true, message: 'Lead updated to Registered' });
-      } else {
-        // Создаём лида
-        const response = await axios.post(
+        const updateResp = await axios.put(
           'https://www.zohoapis.eu/crm/v2/Leads',
           {
             data: [
               {
-                Last_Name: const1 || `Lead ${const2}`,
-                Email: const2,
-                Lead_Status: 'New'
+                id: lead.id,
+                Lead_Status: 'Registered'
               }
             ]
           },
           { headers }
         );
-        return res.json({ success: true, created: response.data });
+        return res.json({ success: true, updated: updateResp.data });
+      } else {
+        // Создаём нового лида
+        const createResp = await axios.post(
+          'https://www.zohoapis.eu/crm/v2/Leads',
+          {
+            data: [
+              {
+                Last_Name: const1,
+                click_id_Alanbase: custom1 || click_id,
+                amount: amount || value || 0,
+                Lead_Status: 'Registered',
+                Currency,
+                Lead_Source: Source,
+                type: 'registration',
+                Email: const2
+              }
+            ]
+          },
+          { headers }
+        );
+        return res.json({ success: true, created: createResp.data });
       }
     }
 
-    // DEPOSIT
+    // ---------- Депозит / FTD ----------
     if (type === 'deposit') {
+      let contactId = null;
+      let retentionId = null;
+
       const contactResp = await axios.get(
         `https://www.zohoapis.eu/crm/v2/Contacts/search?email=${const2}`,
         { headers }
@@ -73,56 +111,32 @@ app.get('/api/alanbase', async (req, res) => {
       const contact = contactResp.data?.data?.[0];
 
       if (contact) {
+        contactId = contact.id;
         const dealResp = await axios.get(
-          `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(Contact_Name:equals:${contact.id})`,
+          `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(Contact_Name:equals:${contactId})`,
           { headers }
         );
         const deal = dealResp.data?.data?.[0];
-
-        if (!deal) throw new Error('Сделка для контакта не найдена');
-
-        const depositResp = await axios.post(
-          `https://www.zohoapis.eu/crm/v2/deposits`,
-          {
-            data: [
-              {
-                Name: `Оплата на сумму ${amount}`,
-                amount,
-                Currency,
-                contact: contact.id,
-                Retention: deal.id,
-                Email: const2
-              }
-            ]
-          },
-          { headers }
-        );
-        return res.json({ success: true, deposit: depositResp.data });
+        if (!deal) throw new Error('Сделка не найдена для контакта');
+        retentionId = deal.id;
       } else {
         const leadResp = await axios.get(
           `https://www.zohoapis.eu/crm/v2/Leads/search?email=${const2}`,
           { headers }
         );
         const lead = leadResp.data?.data?.[0];
-
         if (!lead) throw new Error('Лид не найден');
 
-        const depositResp = await axios.post(
-          `https://www.zohoapis.eu/crm/v2/deposits`,
-          {
-            data: [
-              {
-                Name: `Оплата на сумму ${amount}`,
-                amount,
-                Currency,
-                field1: lead.id,
-                Email: const2
-              }
-            ]
-          },
+        const dealResp = await axios.get(
+          `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(Lead_Name:equals:${lead.id})`,
           { headers }
         );
+        const deal = dealResp.data?.data?.[0];
+        if (!deal) throw new Error('Сделка не найдена для лида');
 
+        retentionId = deal.id;
+
+        // Обновляем статус лида
         await axios.put(
           'https://www.zohoapis.eu/crm/v2/Leads',
           {
@@ -130,13 +144,32 @@ app.get('/api/alanbase', async (req, res) => {
           },
           { headers }
         );
-
-        return res.json({ success: true, deposit: depositResp.data, message: 'Создан deposit и обновлён лид' });
       }
+
+      // Создаём депозит
+      const depositResp = await axios.post(
+        `https://www.zohoapis.eu/crm/v2/deposits`,
+        {
+          data: [
+            {
+              Name: `Оплата на сумму ${amount || value}`,
+              amount: amount || value,
+              contact: contactId,
+              field1: contactId ? undefined : lead.id,
+              Retention: retentionId,
+              Currency,
+              Email: const2
+            }
+          ]
+        },
+        { headers }
+      );
+
+      return res.json({ success: true, deposit: depositResp.data });
     }
 
-    // WITHDRAWAL
-    if (type === 'withdrawal') {
+    // ---------- Повторный депозит / Вывод ----------
+    if (type === 'redeposit' || type === 'withdrawal') {
       const contactResp = await axios.get(
         `https://www.zohoapis.eu/crm/v2/Contacts/search?email=${const2}`,
         { headers }
@@ -144,39 +177,46 @@ app.get('/api/alanbase', async (req, res) => {
       const contact = contactResp.data?.data?.[0];
       if (!contact) throw new Error('Контакт с таким Email не найден');
 
-      const dealResp = await axios.get(
+      const dealsResp = await axios.get(
         `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(Contact_Name:equals:${contact.id})`,
         { headers }
       );
-      const deal = dealResp.data?.data?.[0];
-      if (!deal) throw new Error('Сделка не найдена');
+      const deal = dealsResp.data?.data?.[0];
+      if (!deal) throw new Error('Retention-сделка не найдена');
 
-      const withdrawalResp = await axios.post(
-        `https://www.zohoapis.eu/crm/v2/withdrawals`,
+      const module = type === 'redeposit' ? 'deposits' : 'withdrawals';
+      const name = type === 'redeposit'
+        ? `Повторный депозит на сумму ${amount || value}`
+        : `Вывод на сумму ${amount || value}`;
+
+      const recordResp = await axios.post(
+        `https://www.zohoapis.eu/crm/v2/${module}`,
         {
           data: [
             {
-              Name: `Вывод на сумму ${amount}`,
-              amount,
-              Currency,
+              Name: name,
+              amount: amount || value,
               contact: contact.id,
               Retention: deal.id,
+              Currency,
               Email: const2
             }
           ]
         },
         { headers }
       );
-      return res.json({ success: true, withdrawal: withdrawalResp.data });
+
+      return res.json({ success: true, [module]: recordResp.data });
     }
 
-    return res.status(400).json({ success: false, message: 'Неизвестный тип события' });
+    res.status(400).json({ success: false, error: 'Неизвестный тип события' });
   } catch (error) {
-    console.error('Ошибка:', error?.response?.data || error.message);
+    console.error('Ошибка обработки запроса:', error?.response?.data || error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
+// Запуск сервера
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
