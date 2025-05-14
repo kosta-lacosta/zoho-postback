@@ -4,28 +4,35 @@ import axios from 'axios';
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Функция получения токена доступа
+// ✅ Фикс: Получение access_token с правильным Content-Type
 async function getAccessToken() {
   try {
+    const params = new URLSearchParams();
+    params.append('client_id', '1000.PMKVL76WC40TDI4LS9Q0MOCRGIPE0A');
+    params.append('client_secret', '225bac66c839b4b48df2c5b63552bc6e37108f76bb');
+    params.append('grant_type', 'refresh_token');
+    params.append('refresh_token', '1000.eaa8b6abd9501f19a7318a3832e26d86.b7332829e917faf5db8dc1df3d24d60a');
+
     const response = await axios.post(
       'https://accounts.zoho.eu/oauth/v2/token',
+      params.toString(),
       {
-        client_id: '1000.PMKVL76WC40TDI4LS9Q0MOCRGIPE0A',
-        client_secret: '225bac66c839b4b48df2c5b63552bc6e37108f76bb',
-        grant_type: 'refresh_token',
-        refresh_token: '1000.eaa8b6abd9501f19a7318a3832e26d86.b7332829e917faf5db8dc1df3d24d60a'
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
       }
     );
+
     return response.data.access_token;
   } catch (error) {
-    throw new Error('Ошибка получения токена: ' + error.message);
+    throw new Error('Ошибка получения токена: ' + (error?.response?.data?.error || error.message));
   }
 }
 
 // Главный обработчик запроса API для Alanbase
 app.get('/api/alanbase', async (req, res) => {
   const {
-    click_id,     // из sub_id1
+    click_id,
     status,
     amount,
     Currency,
@@ -34,12 +41,11 @@ app.get('/api/alanbase', async (req, res) => {
     Email,
     value,
     id,
-    custom1,      // будет использоваться как click_id при необходимости
+    custom1,
     goal,
     type: rawType
   } = req.query;
 
-  // Унификация типа события
   let type = rawType || goal;
   if (type === 'reg') type = 'registration';
   if (type === 'dep') type = 'deposit';
@@ -62,7 +68,6 @@ app.get('/api/alanbase', async (req, res) => {
       const lead = leadResp.data?.data?.[0];
 
       if (lead) {
-        // Обновляем статус
         const updateResp = await axios.put(
           'https://www.zohoapis.eu/crm/v2/Leads',
           {
@@ -77,7 +82,6 @@ app.get('/api/alanbase', async (req, res) => {
         );
         return res.json({ success: true, updated: updateResp.data });
       } else {
-        // Создаём нового лида
         const createResp = await axios.post(
           'https://www.zohoapis.eu/crm/v2/Leads',
           {
@@ -137,7 +141,6 @@ app.get('/api/alanbase', async (req, res) => {
 
         retentionId = deal.id;
 
-        // Обновляем статус лида
         await axios.put(
           'https://www.zohoapis.eu/crm/v2/Leads',
           {
@@ -147,7 +150,6 @@ app.get('/api/alanbase', async (req, res) => {
         );
       }
 
-      // Создаём депозит
       const depositResp = await axios.post(
         `https://www.zohoapis.eu/crm/v2/deposits`,
         {
