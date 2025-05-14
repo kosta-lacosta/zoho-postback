@@ -12,9 +12,9 @@ async function getAccessToken() {
     null,
     {
       params: {
-        client_id: process.env.ZOHO_CLIENT_ID,
-        client_secret: process.env.ZOHO_CLIENT_SECRET,
-        refresh_token: process.env.ZOHO_REFRESH_TOKEN,
+        client_id: '1000.PMKVL76WC40TDI4LS9Q0MOCRGIPE0A',
+        client_secret: '225bac66c839b4b48df2c5b63552bc6e37108f76bb',
+        refresh_token: '1000.eaa8b6abd9501f19a7318a3832e26d86.b7332829e917faf5db8dc1df3d24d60a',
         grant_type: 'refresh_token'
       }
     }
