@@ -1,5 +1,6 @@
-const express = require('express');
-const axios = require('axios');
+import express from 'express';
+import axios from 'axios';
+
 const app = express();
 const port = process.env.PORT || 3000;
 
