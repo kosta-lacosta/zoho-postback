@@ -43,6 +43,7 @@ app.get('/api/alanbase', async (req, res) => {
     id,
     custom1,
     goal,
+    const2,
     type: rawType
   } = req.query;
 
@@ -62,7 +63,7 @@ app.get('/api/alanbase', async (req, res) => {
     // ---------- Регистрация ----------
     if (type === 'registration') {
       const leadResp = await axios.get(
-        `https://www.zohoapis.eu/crm/v2/Leads/search?email=${const2}`,
+        `https://www.zohoapis.eu/crm/v2/Leads/search?click_id_Alanbase=${id}`,
         { headers }
       );
       const lead = leadResp.data?.data?.[0];
@@ -110,7 +111,7 @@ app.get('/api/alanbase', async (req, res) => {
       let retentionId = null;
 
       const contactResp = await axios.get(
-        `https://www.zohoapis.eu/crm/v2/Contacts/search?email=${const2}`,
+        `https://www.zohoapis.eu/crm/v2/Contacts/search?click_id_Alanbase=${id}`,
         { headers }
       );
       const contact = contactResp.data?.data?.[0];
@@ -126,7 +127,7 @@ app.get('/api/alanbase', async (req, res) => {
         retentionId = deal.id;
       } else {
         const leadResp = await axios.get(
-          `https://www.zohoapis.eu/crm/v2/Leads/search?email=${const2}`,
+          `https://www.zohoapis.eu/crm/v2/Leads/search?click_id_Alanbase=${id}`,
           { headers }
         );
         const lead = leadResp.data?.data?.[0];
@@ -174,7 +175,7 @@ app.get('/api/alanbase', async (req, res) => {
     // ---------- Повторный депозит / Вывод ----------
     if (type === 'redeposit' || type === 'withdrawal') {
       const contactResp = await axios.get(
-        `https://www.zohoapis.eu/crm/v2/Contacts/search?email=${const2}`,
+        `https://www.zohoapis.eu/crm/v2/Contacts/search?click_id_Alanbase=${id}`,
         { headers }
       );
       const contact = contactResp.data?.data?.[0];
