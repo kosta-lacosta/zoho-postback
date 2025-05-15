@@ -89,7 +89,7 @@ app.get('/api/alanbase', async (req, res) => {
             data: [
               {
                 Last_Name: const2 || 'Registration '+ custom1,
-                click_id_Alanbase: id,
+                click_id_Alanbase: id || custom1,
                 amount: amount || value || 0,
                 Lead_Status: 'Registered',
                 Currency,
