@@ -54,7 +54,7 @@ app.get('/api/alanbase', async (req, res) => {
   if (type === 'wd')  type = 'withdrawal';
 
   const const1 = Last_Name || `Postback ${custom1 || click_id}`;
-  const const2 = Email;
+ // const const2 = Email;
 
   try {
     const token = await getAccessToken();
