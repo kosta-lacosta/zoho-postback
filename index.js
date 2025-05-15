@@ -4,7 +4,7 @@ import axios from 'axios';
 const app = express();
 const port = process.env.PORT || 3000;
 
-// ✅ Фикс: Получение access_token с правильным Content-Type
+// Получение Zoho access_token
 async function getAccessToken() {
   try {
     const params = new URLSearchParams();
@@ -17,9 +17,7 @@ async function getAccessToken() {
       'https://accounts.zoho.eu/oauth/v2/token',
       params.toString(),
       {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       }
     );
 
@@ -29,38 +27,40 @@ async function getAccessToken() {
   }
 }
 
-// Главный обработчик запроса API для Alanbase
+// Обработчик Alanbase постбэков
 app.get('/api/alanbase', async (req, res) => {
   const {
-    click_id,
-    status,
-    amount,
-    Currency,
-    Source,
-    Last_Name,
-    Email,
-    value,
     id,
-    custom1,
+    status,
+    value,
+    amount,
     goal,
+    currency,
+    custom1,
     const2,
+    sub_id1,
     type: rawType
   } = req.query;
 
-  let type = rawType || goal;
-  if (type === 'reg') type = 'registration';
-  if (type === 'dep') type = 'deposit';
-  if (type === 'red') type = 'redeposit';
-  if (type === 'wd')  type = 'withdrawal';
+  const clickId = id || custom1 || sub_id1;
+  const typeMap = {
+    reg: 'registration',
+    dep: 'deposit',
+    red: 'redeposit',
+    wd: 'withdrawal'
+  };
 
-  const const1 = Last_Name || `Postback ${custom1 || click_id}`;
- // const const2 = Email;
+  const type = typeMap[rawType || goal] || 'unknown';
+
+  if (!clickId) {
+    return res.status(400).json({ success: false, error: 'Параметр click_id (id/custom1/sub_id1) не передан' });
+  }
 
   try {
     const token = await getAccessToken();
     const headers = { Authorization: `Zoho-oauthtoken ${token}` };
 
-    // ---------- Регистрация ----------
+    // 🔵 Регистрация
     if (type === 'registration') {
       const leadResp = await axios.get(
         `https://www.zohoapis.eu/crm/v2/Leads/search?criteria=(Email:equals:${const2})`,
@@ -72,12 +72,7 @@ app.get('/api/alanbase', async (req, res) => {
         const updateResp = await axios.put(
           'https://www.zohoapis.eu/crm/v2/Leads',
           {
-            data: [
-              {
-                id: lead.id,
-                Lead_Status: 'Registered'
-              }
-            ]
+            data: [{ id: lead.id, Lead_Status: 'Registered' }]
           },
           { headers }
         );
@@ -86,18 +81,15 @@ app.get('/api/alanbase', async (req, res) => {
         const createResp = await axios.post(
           'https://www.zohoapis.eu/crm/v2/Leads',
           {
-            data: [
-              {
-                Last_Name: const2 || 'Registration '+ custom1,
-                click_id_Alanbase: id || custom1,
-                amount: amount || value || 0,
-                Lead_Status: 'Registered',
-                Currency,
-                Lead_Source: Source,
-                type: 'registration',
-                Email: const2
-              }
-            ]
+            data: [{
+              Last_Name: const2 || `Reg ${clickId}`,
+              click_id_Alanbase: clickId,
+              amount: amount || value || 0,
+              Lead_Status: 'Registered',
+              Currency: currency,
+              type: 'registration',
+              Email: const2
+            }]
           },
           { headers }
         );
@@ -105,13 +97,14 @@ app.get('/api/alanbase', async (req, res) => {
       }
     }
 
-    // ---------- Депозит / FTD ----------
+    // 🟢 Депозит
     if (type === 'deposit') {
       let contactId = null;
+      let leadId = null;
       let retentionId = null;
 
       const contactResp = await axios.get(
-        `https://www.zohoapis.eu/crm/v2/Contacts/search?criteria=(click_id_Alanbase:equals:${id})`,
+        `https://www.zohoapis.eu/crm/v2/Contacts/search?criteria=(click_id_Alanbase:equals:${clickId})`,
         { headers }
       );
       const contact = contactResp.data?.data?.[0];
@@ -127,11 +120,12 @@ app.get('/api/alanbase', async (req, res) => {
         retentionId = deal.id;
       } else {
         const leadResp = await axios.get(
-          `https://www.zohoapis.eu/crm/v2/Leads/search?criteria=(click_id_Alanbase:equals:${id})`,
+          `https://www.zohoapis.eu/crm/v2/Leads/search?criteria=(click_id_Alanbase:equals:${clickId})`,
           { headers }
         );
         const lead = leadResp.data?.data?.[0];
         if (!lead) throw new Error('Лид не найден');
+        leadId = lead.id;
 
         const dealResp = await axios.get(
           `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(Lead_Name:equals:${lead.id})`,
@@ -152,19 +146,17 @@ app.get('/api/alanbase', async (req, res) => {
       }
 
       const depositResp = await axios.post(
-        `https://www.zohoapis.eu/crm/v2/deposits`,
+        'https://www.zohoapis.eu/crm/v2/deposits',
         {
-          data: [
-            {
-              Name: `Оплата на сумму ${amount || value}`,
-              amount: amount || value,
-              contact: contactId,
-              field1: contactId ? undefined : lead.id,
-              Retention: retentionId,
-              Currency,
-              Email: const2
-            }
-          ]
+          data: [{
+            Name: `Оплата на сумму ${amount || value}`,
+            amount: amount || value,
+            contact: contactId,
+            field1: leadId,
+            Retention: retentionId,
+            Currency: currency,
+            Email: const2
+          }]
         },
         { headers }
       );
@@ -172,14 +164,14 @@ app.get('/api/alanbase', async (req, res) => {
       return res.json({ success: true, deposit: depositResp.data });
     }
 
-    // ---------- Повторный депозит / Вывод ----------
+    // 🔁 Повторный депозит / Вывод
     if (type === 'redeposit' || type === 'withdrawal') {
       const contactResp = await axios.get(
-        `https://www.zohoapis.eu/crm/v2/Contacts/search?click_id_Alanbase=${id}`,
+        `https://www.zohoapis.eu/crm/v2/Contacts/search?criteria=(click_id_Alanbase:equals:${clickId})`,
         { headers }
       );
       const contact = contactResp.data?.data?.[0];
-      if (!contact) throw new Error('Контакт с таким Email не найден');
+      if (!contact) throw new Error('Контакт не найден');
 
       const dealsResp = await axios.get(
         `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(Contact_Name:equals:${contact.id})`,
@@ -189,23 +181,19 @@ app.get('/api/alanbase', async (req, res) => {
       if (!deal) throw new Error('Retention-сделка не найдена');
 
       const module = type === 'redeposit' ? 'deposits' : 'withdrawals';
-      const name = type === 'redeposit'
-        ? `Повторный депозит на сумму ${amount || value}`
-        : `Вывод на сумму ${amount || value}`;
+      const name = `${type === 'redeposit' ? 'Повторный депозит' : 'Вывод'} на сумму ${amount || value}`;
 
       const recordResp = await axios.post(
         `https://www.zohoapis.eu/crm/v2/${module}`,
         {
-          data: [
-            {
-              Name: name,
-              amount: amount || value,
-              contact: contact.id,
-              Retention: deal.id,
-              Currency,
-              Email: const2
-            }
-          ]
+          data: [{
+            Name: name,
+            amount: amount || value,
+            contact: contact.id,
+            Retention: deal.id,
+            Currency: currency,
+            Email: const2
+          }]
         },
         { headers }
       );
@@ -213,14 +201,14 @@ app.get('/api/alanbase', async (req, res) => {
       return res.json({ success: true, [module]: recordResp.data });
     }
 
+    // ❌ Неизвестный тип
     res.status(400).json({ success: false, error: 'Неизвестный тип события' });
   } catch (error) {
     console.error('Ошибка обработки запроса:', error?.response?.data || error.message);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error?.response?.data || error.message });
   }
 });
 
-// Запуск сервера
 app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+  console.log(`✅ Server running on port ${port}`);
 });
