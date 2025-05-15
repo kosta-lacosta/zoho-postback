@@ -111,7 +111,7 @@ app.get('/api/alanbase', async (req, res) => {
       let retentionId = null;
 
       const contactResp = await axios.get(
-        `https://www.zohoapis.eu/crm/v2/Contacts/search?click_id_Alanbase=${id}`,
+        `https://www.zohoapis.eu/crm/v2/Contacts/search?criteria=(click_id_Alanbase:equals:${id})`,
         { headers }
       );
       const contact = contactResp.data?.data?.[0];
@@ -127,7 +127,7 @@ app.get('/api/alanbase', async (req, res) => {
         retentionId = deal.id;
       } else {
         const leadResp = await axios.get(
-          `https://www.zohoapis.eu/crm/v2/Leads/search?click_id_Alanbase=${id}`,
+          `https://www.zohoapis.eu/crm/v2/Leads/search?criteria=(click_id_Alanbase:equals:${id})`,
           { headers }
         );
         const lead = leadResp.data?.data?.[0];
