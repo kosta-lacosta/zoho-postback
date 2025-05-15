@@ -63,7 +63,7 @@ app.get('/api/alanbase', async (req, res) => {
     // ---------- Регистрация ----------
     if (type === 'registration') {
       const leadResp = await axios.get(
-        `https://www.zohoapis.eu/crm/v2/Leads/search?click_id_Alanbase=${id}`,
+        `https://www.zohoapis.eu/crm/v2/Leads/search?criteria=(Email:equals:${const2})`,
         { headers }
       );
       const lead = leadResp.data?.data?.[0];
@@ -88,8 +88,8 @@ app.get('/api/alanbase', async (req, res) => {
           {
             data: [
               {
-                Last_Name: const1,
-                click_id_Alanbase: custom1 || click_id,
+                Last_Name: const2 || 'Registration '+ custom1,
+                click_id_Alanbase: click_id,
                 amount: amount || value || 0,
                 Lead_Status: 'Registered',
                 Currency,
