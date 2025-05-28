@@ -11,7 +11,7 @@ async function getAccessToken() {
     params.append('client_id', '1000.PMKVL76WC40TDI4LS9Q0MOCRGIPE0A');
     params.append('client_secret', '225bac66c839b4b48df2c5b63552bc6e37108f76bb');
     params.append('grant_type', 'refresh_token');
-    params.append('refresh_token', '1000.eaa8b6abd9501f19a7318a3832e26d86.b7332829e917faf5db8dc1df3d24d60a');
+    params.append('refresh_token', '1000.533a83031fea26bb4d0470e51f023930.ff8ded7294143ff9f17ff71c9c740dae');
 
     const response = await axios.post(
       'https://accounts.zoho.eu/oauth/v2/token',
