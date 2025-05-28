@@ -252,13 +252,27 @@ app.get('/api/alanbase', async (req, res) => {
           { headers }
         );
 
+        console.log('Convert API Response:', JSON.stringify(convertResp.data, null, 2));
+
         if (!convertResp.data?.data?.[0]) {
-          throw new Error('Не удалось конвертировать лид');
+          throw new Error('Не удалось конвертировать лид - пустой ответ от API');
         }
 
         const convertedData = convertResp.data.data[0];
-        contactId = convertedData.Contacts;
-        retentionId = convertedData.Deals;
+        
+        // Проверяем разные возможные структуры ответа
+        if (convertedData.details) {
+          contactId = convertedData.details.Contacts?.id || convertedData.details.Contacts;
+          retentionId = convertedData.details.Deals?.id || convertedData.details.Deals;
+        } else {
+          contactId = convertedData.Contacts?.id || convertedData.Contacts;
+          retentionId = convertedData.Deals?.id || convertedData.Deals;
+        }
+
+        if (!contactId || !retentionId) {
+          console.error('Структура ответа конвертации:', convertedData);
+          throw new Error(`Не удалось получить ID после конвертации. ContactId: ${contactId}, DealId: ${retentionId}`);
+        }
         
         console.log('Лид успешно конвертирован:', {
           leadId: lead.id,
