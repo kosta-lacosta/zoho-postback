@@ -307,6 +307,8 @@ app.get('/api/alanbase', async (req, res) => {
 
         if (!contactId || !retentionId) {
           console.error('Полная структура ответа конвертации:', JSON.stringify(convertResp.data, null, 2));
+          throw new Error('Не удалось получить ID созданных контакта или сделки после конвертации');
+        }
         
         console.log('Лид успешно конвертирован:', {
           leadId: lead.id,
