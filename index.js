@@ -210,6 +210,14 @@ app.get('/api/alanbase', async (req, res) => {
       const lead = await findLead(clickId, email, headers);
       
       if (lead) {
+        console.log('Найден лид для депозита:', {
+          id: lead.id,
+          Last_Name: lead.Last_Name,
+          Email: lead.Email,
+          click_id_Alanbase: lead.click_id_Alanbase,
+          Lead_Status: lead.Lead_Status
+        });
+
         // Если лид найден - обновляем его в стадию FTD
         await axios.put(
           'https://www.zohoapis.eu/crm/v2/Leads',
@@ -220,6 +228,43 @@ app.get('/api/alanbase', async (req, res) => {
         );
         
         // КОНВЕРТИРУЕМ ЛИД В КОНТАКТ И СДЕЛКУ
+        console.log('Конвертируем лид:', {
+          leadId: lead.id,
+          leadData: {
+            Last_Name: lead.Last_Name,
+            Email: lead.Email,
+            click_id_Alanbase: lead.click_id_Alanbase
+          }
+        });
+
+        // Подготавливаем данные для конвертации
+        const contactData = {
+          Last_Name: lead.Last_Name || lead.Email?.split('@')[0] || `Contact_${clickId}`,
+        };
+
+        // Добавляем email только если он есть и валидный
+        if (lead.Email && lead.Email.includes('@')) {
+          contactData.Email = lead.Email;
+        }
+
+        // Добавляем click_id только если он есть
+        if (lead.click_id_Alanbase || clickId) {
+          contactData.click_id_Alanbase = lead.click_id_Alanbase || clickId;
+        }
+
+        const dealData = {
+          Deal_Name: `Retention Deal ${lead.Last_Name || lead.Email || clickId}`,
+          Stage: 'Qualification',
+        };
+
+        // Добавляем поля только если они есть
+        if (lead.click_id_Alanbase || clickId) {
+          dealData.click_id_Alanbase = lead.click_id_Alanbase || clickId;
+        }
+        if (lead.Email && lead.Email.includes('@')) {
+          dealData.Email = lead.Email;
+        }
+
         const convertResp = await axios.post(
           `https://www.zohoapis.eu/crm/v2/Leads/${lead.id}/actions/convert`,
           {
@@ -227,23 +272,21 @@ app.get('/api/alanbase', async (req, res) => {
               overwrite: true,
               notify_lead_owner: false,
               notify_new_entity_owner: false,
-              Contacts: {
-                Last_Name: lead.Last_Name || lead.Email || `Contact ${clickId}`,
-                Email: lead.Email,
-                click_id_Alanbase: lead.click_id_Alanbase || clickId
-              },
-              Deals: {
-                Deal_Name: `Retention Deal for ${lead.Last_Name || lead.Email || clickId}`,
-                Stage: 'Qualification',
-                click_id_Alanbase: lead.click_id_Alanbase || clickId,
-                Email: lead.Email
-              }
+              Contacts: contactData,
+              Deals: dealData
             }]
           },
           { headers }
         );
 
         console.log('Convert API Response:', JSON.stringify(convertResp.data, null, 2));
+
+        // Проверяем на ошибки в ответе
+        if (convertResp.data?.data?.[0]?.status === 'error') {
+          const errorDetails = convertResp.data.data[0];
+          console.error('Ошибка конвертации:', errorDetails);
+          throw new Error(`Ошибка конвертации лида: ${errorDetails.message} (${errorDetails.code})`);
+        }
 
         if (!convertResp.data?.data?.[0]) {
           throw new Error('Не удалось конвертировать лид - пустой ответ от API');
@@ -284,24 +327,64 @@ app.get('/api/alanbase', async (req, res) => {
           }
         }
 
-        // Если все еще не нашли ID, пытаемся найти их вручную
+        // Если все еще не нашли ID после конвертации, создаем контакт и сделку вручную
         if (!contactId || !retentionId) {
-          console.log('Пытаемся найти созданные записи вручную...');
+          console.log('Конвертация не удалась, создаем контакт и сделку вручную...');
           
-          if (!contactId) {
-            const contact = await findContact(clickId, email, headers);
-            if (contact) {
-              contactId = contact.id;
-              console.log('Найден контакт вручную:', contactId);
+          try {
+            // Создаем контакт вручную
+            if (!contactId) {
+              const contactCreateData = {
+                Last_Name: lead.Last_Name || lead.Email?.split('@')[0] || `Contact_${clickId}`,
+              };
+
+              if (lead.Email && lead.Email.includes('@')) {
+                contactCreateData.Email = lead.Email;
+              }
+              if (lead.click_id_Alanbase || clickId) {
+                contactCreateData.click_id_Alanbase = lead.click_id_Alanbase || clickId;
+              }
+
+              const contactCreateResp = await axios.post(
+                'https://www.zohoapis.eu/crm/v2/Contacts',
+                { data: [contactCreateData] },
+                { headers }
+              );
+
+              if (contactCreateResp.data?.data?.[0]?.details?.id) {
+                contactId = contactCreateResp.data.data[0].details.id;
+                console.log('Контакт создан вручную:', contactId);
+              }
             }
-          }
-          
-          if (!retentionId && contactId) {
-            const deal = await findDeal(contactId, clickId, email, headers);
-            if (deal) {
-              retentionId = deal.id;
-              console.log('Найдена сделка вручную:', retentionId);
+
+            // Создаем сделку вручную
+            if (contactId && !retentionId) {
+              const dealCreateData = {
+                Deal_Name: `Retention Deal ${lead.Last_Name || lead.Email || clickId}`,
+                Stage: 'Qualification',
+                Contact_Name: contactId,
+              };
+
+              if (lead.click_id_Alanbase || clickId) {
+                dealCreateData.click_id_Alanbase = lead.click_id_Alanbase || clickId;
+              }
+              if (lead.Email && lead.Email.includes('@')) {
+                dealCreateData.Email = lead.Email;
+              }
+
+              const dealCreateResp = await axios.post(
+                'https://www.zohoapis.eu/crm/v2/Deals',
+                { data: [dealCreateData] },
+                { headers }
+              );
+
+              if (dealCreateResp.data?.data?.[0]?.details?.id) {
+                retentionId = dealCreateResp.data.data[0].details.id;
+                console.log('Сделка создана вручную:', retentionId);
+              }
             }
+          } catch (manualCreateError) {
+            console.error('Ошибка ручного создания:', manualCreateError?.response?.data || manualCreateError.message);
           }
         }
 
