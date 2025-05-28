@@ -206,27 +206,18 @@ app.get('/api/alanbase', async (req, res) => {
 
     // 🟢 Депозит
     if (type === 'deposit') {
-      let contactId = null;
-      let leadId = null;
-      let retentionId = null;
-
-      // Сначала ищем контакт
-      const contact = await findContact(clickId, email, headers);
+      // Сначала ищем лид по click_id или email
+      const lead = await findLead(clickId, email, headers);
       
-      if (contact) {
-        // Если контакт найден, ищем сделку для этого контакта
-        contactId = contact.id;
-        const deal = await findDeal(contactId, clickId, email, headers);
-        if (!deal) {
-          throw new Error('Сделка не найдена для контакта');
-        }
-        retentionId = deal.id;
-      } else {
-        // Если контакт не найден, ищем лид
-        const lead = await findLead(clickId, email, headers);
-        if (!lead) {
-          throw new Error('Лид не найден ни по click_id, ни по email');
-        }
+      if (lead) {
+        // Если лид найден - обновляем его в стадию FTD
+        await axios.put(
+          'https://www.zohoapis.eu/crm/v2/Leads',
+          {
+            data: [{ id: lead.id, Lead_Status: 'FTD' }]
+          },
+          { headers }
+        );
         
         // КОНВЕРТИРУЕМ ЛИД В КОНТАКТ И СДЕЛКУ
         const convertResp = await axios.post(
@@ -260,6 +251,8 @@ app.get('/api/alanbase', async (req, res) => {
 
         const convertedData = convertResp.data.data[0];
         
+        let contactId, retentionId;
+        
         // Проверяем разные возможные структуры ответа
         if (convertedData.details) {
           contactId = convertedData.details.Contacts?.id || convertedData.details.Contacts;
@@ -279,29 +272,68 @@ app.get('/api/alanbase', async (req, res) => {
           contactId,
           dealId: retentionId
         });
+
+        // Создаем депозит
+        const depositResp = await axios.post(
+          'https://www.zohoapis.eu/crm/v2/deposits',
+          {
+            data: [{
+              Name: `Депозит на сумму ${amount || value}`,
+              amount: amount || value,
+              contact: contactId,
+              field1: lead.id,
+              Retention: retentionId,
+              Currency: currency,
+              Email: email
+            }]
+          },
+          { headers }
+        );
+
+        return res.json({ 
+          success: true, 
+          leadUpdated: true,
+          converted: true,
+          deposit: depositResp.data 
+        });
+      } else {
+        // Если лид не найден - ищем контакт и сделку
+        const contact = await findContact(clickId, email, headers);
+        if (!contact) {
+          throw new Error('Не найден ни лид, ни контакт по click_id или email');
+        }
+
+        // Ищем сделку для контакта
+        const deal = await findDeal(contact.id, clickId, email, headers);
+        if (!deal) {
+          throw new Error('Retention-сделка не найдена для контакта');
+        }
+
+        // Создаем депозит
+        const depositResp = await axios.post(
+          'https://www.zohoapis.eu/crm/v2/deposits',
+          {
+            data: [{
+              Name: `Депозит на сумму ${amount || value}`,
+              amount: amount || value,
+              contact: contact.id,
+              Retention: deal.id,
+              Currency: currency,
+              Email: email
+            }]
+          },
+          { headers }
+        );
+
+        return res.json({ 
+          success: true, 
+          deposit: depositResp.data 
+        });
       }
-
-      const depositResp = await axios.post(
-        'https://www.zohoapis.eu/crm/v2/deposits',
-        {
-          data: [{
-            Name: `Оплата на сумму ${amount || value}`,
-            amount: amount || value,
-            contact: contactId,
-            field1: leadId,
-            Retention: retentionId,
-            Currency: currency,
-            Email: email
-          }]
-        },
-        { headers }
-      );
-
-      return res.json({ success: true, deposit: depositResp.data });
     }
 
-    // 🔁 Повторный депозит / Вывод
-    if (type === 'redeposit' || type === 'withdrawal') {
+    // 🔁 Повторный депозит
+    if (type === 'redeposit') {
       // Ищем контакт по click_id или email
       const contact = await findContact(clickId, email, headers);
       if (!contact) {
@@ -314,14 +346,11 @@ app.get('/api/alanbase', async (req, res) => {
         throw new Error('Retention-сделка не найдена для контакта');
       }
 
-      const module = type === 'redeposit' ? 'deposits' : 'withdrawals';
-      const name = `${type === 'redeposit' ? 'Повторный депозит' : 'Вывод'} на сумму ${amount || value}`;
-
-      const recordResp = await axios.post(
-        `https://www.zohoapis.eu/crm/v2/${module}`,
+      const depositResp = await axios.post(
+        'https://www.zohoapis.eu/crm/v2/deposits',
         {
           data: [{
-            Name: name,
+            Name: `Повторный депозит на сумму ${amount || value}`,
             amount: amount || value,
             contact: contact.id,
             Retention: deal.id,
@@ -332,7 +361,39 @@ app.get('/api/alanbase', async (req, res) => {
         { headers }
       );
 
-      return res.json({ success: true, [module]: recordResp.data });
+      return res.json({ success: true, deposit: depositResp.data });
+    }
+
+    // 💰 Вывод средств
+    if (type === 'withdrawal') {
+      // Ищем контакт по click_id или email
+      const contact = await findContact(clickId, email, headers);
+      if (!contact) {
+        throw new Error('Контакт не найден ни по click_id, ни по email');
+      }
+
+      // Ищем сделку для контакта
+      const deal = await findDeal(contact.id, clickId, email, headers);
+      if (!deal) {
+        throw new Error('Retention-сделка не найдена для контакта');
+      }
+
+      const withdrawalResp = await axios.post(
+        'https://www.zohoapis.eu/crm/v2/withdrawals',
+        {
+          data: [{
+            Name: `Вывод на сумму ${amount || value}`,
+            amount: amount || value,
+            contact: contact.id,
+            Retention: deal.id,
+            Currency: currency,
+            Email: email
+          }]
+        },
+        { headers }
+      );
+
+      return res.json({ success: true, withdrawal: withdrawalResp.data });
     }
 
     // ❌ Неизвестный тип
