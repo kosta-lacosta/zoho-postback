@@ -250,22 +250,63 @@ app.get('/api/alanbase', async (req, res) => {
         }
 
         const convertedData = convertResp.data.data[0];
+        console.log('Converted data structure:', JSON.stringify(convertedData, null, 2));
         
         let contactId, retentionId;
         
-        // Проверяем разные возможные структуры ответа
+        // Проверяем все возможные варианты структуры ответа
         if (convertedData.details) {
+          // Вариант 1: данные в details
           contactId = convertedData.details.Contacts?.id || convertedData.details.Contacts;
           retentionId = convertedData.details.Deals?.id || convertedData.details.Deals;
-        } else {
+        } else if (convertedData.Contacts || convertedData.Deals) {
+          // Вариант 2: данные напрямую
           contactId = convertedData.Contacts?.id || convertedData.Contacts;
           retentionId = convertedData.Deals?.id || convertedData.Deals;
+        } else if (convertedData.message && convertedData.message === 'success') {
+          // Вариант 3: успешная конвертация, но нужно искать созданные записи
+          console.log('Конвертация успешна, ищем созданные записи...');
+          
+          // Ищем контакт по email или click_id
+          const createdContact = await findContact(clickId, email, headers);
+          if (createdContact) {
+            contactId = createdContact.id;
+            console.log('Найден созданный контакт:', contactId);
+          }
+          
+          // Ищем сделку по контакту
+          if (contactId) {
+            const createdDeal = await findDeal(contactId, clickId, email, headers);
+            if (createdDeal) {
+              retentionId = createdDeal.id;
+              console.log('Найдена созданная сделка:', retentionId);
+            }
+          }
+        }
+
+        // Если все еще не нашли ID, пытаемся найти их вручную
+        if (!contactId || !retentionId) {
+          console.log('Пытаемся найти созданные записи вручную...');
+          
+          if (!contactId) {
+            const contact = await findContact(clickId, email, headers);
+            if (contact) {
+              contactId = contact.id;
+              console.log('Найден контакт вручную:', contactId);
+            }
+          }
+          
+          if (!retentionId && contactId) {
+            const deal = await findDeal(contactId, clickId, email, headers);
+            if (deal) {
+              retentionId = deal.id;
+              console.log('Найдена сделка вручную:', retentionId);
+            }
+          }
         }
 
         if (!contactId || !retentionId) {
-          console.error('Структура ответа конвертации:', convertedData);
-          throw new Error(`Не удалось получить ID после конвертации. ContactId: ${contactId}, DealId: ${retentionId}`);
-        }
+          console.error('Полная структура ответа конвертации:', JSON.stringify(convertResp.data, null, 2));
         
         console.log('Лид успешно конвертирован:', {
           leadId: lead.id,
