@@ -266,19 +266,26 @@ app.get('/api/alanbase', async (req, res) => {
         }
 
         const convertResp = await axios.post(
-          `https://www.zohoapis.eu/crm/v2/Leads/${lead.id}/actions/convert`,
-          {
-            data: [{
-              overwrite: true,
-              notify_lead_owner: false,
-              notify_new_entity_owner: false,
-              Contacts: contactData,
-              Deals: dealData
-            }]
-          },
-          { headers }
-        );
-
+  `https://www.zohoapis.eu/crm/v2/Leads/${lead.id}/actions/convert`,
+  {
+    data: [{
+      overwrite: true,
+      notify_lead_owner: false,
+      notify_new_entity_owner: false,
+      Contacts: {
+        Last_Name: lead.Last_Name || lead.Email || `Contact ${clickId}`,
+        Email: lead.Email
+      },
+      Deals: {
+        Deal_Name: `Retention Deal for ${lead.Last_Name || lead.Email || clickId}`,
+        Stage: 'Qualification',
+        Email: lead.Email,
+        click_id_Alanbase: lead.click_id_Alanbase || clickId
+      }
+    }]
+  },
+  { headers }
+);
         console.log('Convert API Response:', JSON.stringify(convertResp.data, null, 2));
 
         // Проверяем на ошибки в ответе
