@@ -227,23 +227,44 @@ app.get('/api/alanbase', async (req, res) => {
         if (!lead) {
           throw new Error('Лид не найден ни по click_id, ни по email');
         }
-        leadId = lead.id;
-
-        // Ищем сделку для лида
-        const deal = await findDeal(null, clickId, email, headers);
-        if (!deal) {
-          throw new Error('Сделка не найдена для лида');
-        }
-        retentionId = deal.id;
-
-        // Обновляем статус лида на FTD
-        await axios.put(
-          'https://www.zohoapis.eu/crm/v2/Leads',
+        
+        // КОНВЕРТИРУЕМ ЛИД В КОНТАКТ И СДЕЛКУ
+        const convertResp = await axios.post(
+          `https://www.zohoapis.eu/crm/v2/Leads/${lead.id}/actions/convert`,
           {
-            data: [{ id: lead.id, Lead_Status: 'FTD' }]
+            data: [{
+              overwrite: true,
+              notify_lead_owner: false,
+              notify_new_entity_owner: false,
+              Contacts: {
+                Last_Name: lead.Last_Name || lead.Email || `Contact ${clickId}`,
+                Email: lead.Email,
+                click_id_Alanbase: lead.click_id_Alanbase || clickId
+              },
+              Deals: {
+                Deal_Name: `Retention Deal for ${lead.Last_Name || lead.Email || clickId}`,
+                Stage: 'Qualification',
+                click_id_Alanbase: lead.click_id_Alanbase || clickId,
+                Email: lead.Email
+              }
+            }]
           },
           { headers }
         );
+
+        if (!convertResp.data?.data?.[0]) {
+          throw new Error('Не удалось конвертировать лид');
+        }
+
+        const convertedData = convertResp.data.data[0];
+        contactId = convertedData.Contacts;
+        retentionId = convertedData.Deals;
+        
+        console.log('Лид успешно конвертирован:', {
+          leadId: lead.id,
+          contactId,
+          dealId: retentionId
+        });
       }
 
       const depositResp = await axios.post(
