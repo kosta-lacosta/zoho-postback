@@ -128,7 +128,7 @@ app.get('/api/alanbase', async (req, res) => {
         leadId = lead.id;
 
         const dealResp = await axios.get(
-          `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(Lead_Name:equals:${lead.id})`,
+          `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(click_id_Alanbase:equals:${clickId})`,
           { headers }
         );
         const deal = dealResp.data?.data?.[0];
