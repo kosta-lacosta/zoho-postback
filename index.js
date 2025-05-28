@@ -239,7 +239,7 @@ app.get('/api/alanbase', async (req, res) => {
 
         // Подготавливаем данные для конвертации
         const contactData = {
-          Last_Name: lead.Last_Name || lead.Email?.split('@')[0] || `Contact_${clickId}`,
+          Last_Name: lead.Last_Name || lead.Email?.split('@')[0] ,
         };
 
         // Добавляем email только если он есть и валидный
@@ -253,7 +253,7 @@ app.get('/api/alanbase', async (req, res) => {
         }
 
         const dealData = {
-          Deal_Name: `Retention Deal ${lead.Last_Name || lead.Email || clickId}`,
+          Deal_Name: `Retention Deal ${lead.Last_Name || lead.Email}`,
           Stage: 'Qualification',
         };
 
