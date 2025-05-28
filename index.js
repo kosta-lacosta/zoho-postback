@@ -273,11 +273,11 @@ app.get('/api/alanbase', async (req, res) => {
       notify_lead_owner: false,
       notify_new_entity_owner: false,
       Contacts: {
-        Last_Name: lead.Last_Name || lead.Email || `Contact ${clickId}`,
+        Last_Name: lead.Last_Name || lead.Email,
         Email: lead.Email
       },
       Deals: {
-        Deal_Name: `Retention Deal for ${lead.Last_Name || lead.Email || clickId}`,
+        Deal_Name: `Retention Deal for ${lead.Last_Name || lead.Email}`,
         Stage: 'Qualification',
         Email: lead.Email,
         click_id_Alanbase: lead.click_id_Alanbase || clickId
