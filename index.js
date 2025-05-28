@@ -27,6 +27,113 @@ async function getAccessToken() {
   }
 }
 
+// Функция поиска лида по click_id или email
+async function findLead(clickId, email, headers) {
+  try {
+    // Сначала ищем по click_id
+    if (clickId) {
+      const leadResp = await axios.get(
+        `https://www.zohoapis.eu/crm/v2/Leads/search?criteria=(click_id_Alanbase:equals:${clickId})`,
+        { headers }
+      );
+      if (leadResp.data?.data?.[0]) {
+        return leadResp.data.data[0];
+      }
+    }
+    
+    // Если не найден по click_id, ищем по email
+    if (email) {
+      const leadResp = await axios.get(
+        `https://www.zohoapis.eu/crm/v2/Leads/search?criteria=(Email:equals:${email})`,
+        { headers }
+      );
+      if (leadResp.data?.data?.[0]) {
+        return leadResp.data.data[0];
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Ошибка поиска лида:', error?.response?.data || error.message);
+    return null;
+  }
+}
+
+// Функция поиска контакта по click_id или email
+async function findContact(clickId, email, headers) {
+  try {
+    // Сначала ищем по click_id
+    if (clickId) {
+      const contactResp = await axios.get(
+        `https://www.zohoapis.eu/crm/v2/Contacts/search?criteria=(click_id_Alanbase:equals:${clickId})`,
+        { headers }
+      );
+      if (contactResp.data?.data?.[0]) {
+        return contactResp.data.data[0];
+      }
+    }
+    
+    // Если не найден по click_id, ищем по email
+    if (email) {
+      const contactResp = await axios.get(
+        `https://www.zohoapis.eu/crm/v2/Contacts/search?criteria=(Email:equals:${email})`,
+        { headers }
+      );
+      if (contactResp.data?.data?.[0]) {
+        return contactResp.data.data[0];
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Ошибка поиска контакта:', error?.response?.data || error.message);
+    return null;
+  }
+}
+
+// Функция поиска сделки по контакту или лиду
+async function findDeal(contactId, clickId, email, headers) {
+  try {
+    // Если есть контакт, ищем по Contact_Name
+    if (contactId) {
+      const dealResp = await axios.get(
+        `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(Contact_Name:equals:${contactId})`,
+        { headers }
+      );
+      if (dealResp.data?.data?.[0]) {
+        return dealResp.data.data[0];
+      }
+    }
+    
+    // Если нет контакта, ищем сделку по click_id
+    if (clickId) {
+      const dealResp = await axios.get(
+        `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(click_id_Alanbase:equals:${clickId})`,
+        { headers }
+      );
+      if (dealResp.data?.data?.[0]) {
+        return dealResp.data.data[0];
+      }
+    }
+    
+    // Если и по click_id не найдена, ищем по email
+    if (email) {
+      const dealResp = await axios.get(
+        `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(Email:equals:${email})`,
+        { headers }
+      );
+      if (dealResp.data?.data?.[0]) {
+        return dealResp.data.data[0];
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Ошибка поиска сделки:', error?.response?.data || error.message);
+    return null;
+  }
+}
+
 // Обработчик Alanbase постбэков
 app.get('/api/alanbase', async (req, res) => {
   const {
@@ -43,6 +150,7 @@ app.get('/api/alanbase', async (req, res) => {
   } = req.query;
 
   const clickId = id || custom1 || sub_id1;
+  const email = const2;
   const typeMap = {
     reg: 'registration',
     dep: 'deposit',
@@ -52,8 +160,11 @@ app.get('/api/alanbase', async (req, res) => {
 
   const type = typeMap[rawType || goal] || 'unknown';
 
-  if (!clickId) {
-    return res.status(400).json({ success: false, error: 'Параметр click_id (id/custom1/sub_id1) не передан' });
+  if (!clickId && !email) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Должен быть передан либо click_id (id/custom1/sub_id1), либо email (const2)' 
+    });
   }
 
   try {
@@ -62,11 +173,7 @@ app.get('/api/alanbase', async (req, res) => {
 
     // 🔵 Регистрация
     if (type === 'registration') {
-      const leadResp = await axios.get(
-        `https://www.zohoapis.eu/crm/v2/Leads/search?criteria=(Email:equals:${const2})`,
-        { headers }
-      );
-      const lead = leadResp.data?.data?.[0];
+      const lead = await findLead(clickId, email, headers);
 
       if (lead) {
         const updateResp = await axios.put(
@@ -82,13 +189,13 @@ app.get('/api/alanbase', async (req, res) => {
           'https://www.zohoapis.eu/crm/v2/Leads',
           {
             data: [{
-              Last_Name: const2 || `Reg ${clickId}`,
+              Last_Name: email || `Reg ${clickId}`,
               click_id_Alanbase: clickId,
               amount: amount || value || 0,
               Lead_Status: 'Registered',
               Currency: currency,
               type: 'registration',
-              Email: const2
+              Email: email
             }]
           },
           { headers }
@@ -103,39 +210,33 @@ app.get('/api/alanbase', async (req, res) => {
       let leadId = null;
       let retentionId = null;
 
-      const contactResp = await axios.get(
-        `https://www.zohoapis.eu/crm/v2/Contacts/search?criteria=(click_id_Alanbase:equals:${clickId})`,
-        { headers }
-      );
-      const contact = contactResp.data?.data?.[0];
-
+      // Сначала ищем контакт
+      const contact = await findContact(clickId, email, headers);
+      
       if (contact) {
+        // Если контакт найден, ищем сделку для этого контакта
         contactId = contact.id;
-        const dealResp = await axios.get(
-          `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(Contact_Name:equals:${contactId})`,
-          { headers }
-        );
-        const deal = dealResp.data?.data?.[0];
-        if (!deal) throw new Error('Сделка не найдена для контакта');
+        const deal = await findDeal(contactId, clickId, email, headers);
+        if (!deal) {
+          throw new Error('Сделка не найдена для контакта');
+        }
         retentionId = deal.id;
       } else {
-        const leadResp = await axios.get(
-          `https://www.zohoapis.eu/crm/v2/Leads/search?criteria=(click_id_Alanbase:equals:${clickId})`,
-          { headers }
-        );
-        const lead = leadResp.data?.data?.[0];
-        if (!lead) throw new Error('Лид не найден');
+        // Если контакт не найден, ищем лид
+        const lead = await findLead(clickId, email, headers);
+        if (!lead) {
+          throw new Error('Лид не найден ни по click_id, ни по email');
+        }
         leadId = lead.id;
 
-        const dealResp = await axios.get(
-          `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(click_id_Alanbase:equals:${clickId})`,
-          { headers }
-        );
-        const deal = dealResp.data?.data?.[0];
-        if (!deal) throw new Error('Сделка не найдена для лида');
-
+        // Ищем сделку для лида
+        const deal = await findDeal(null, clickId, email, headers);
+        if (!deal) {
+          throw new Error('Сделка не найдена для лида');
+        }
         retentionId = deal.id;
 
+        // Обновляем статус лида на FTD
         await axios.put(
           'https://www.zohoapis.eu/crm/v2/Leads',
           {
@@ -155,7 +256,7 @@ app.get('/api/alanbase', async (req, res) => {
             field1: leadId,
             Retention: retentionId,
             Currency: currency,
-            Email: const2
+            Email: email
           }]
         },
         { headers }
@@ -166,19 +267,17 @@ app.get('/api/alanbase', async (req, res) => {
 
     // 🔁 Повторный депозит / Вывод
     if (type === 'redeposit' || type === 'withdrawal') {
-      const contactResp = await axios.get(
-        `https://www.zohoapis.eu/crm/v2/Contacts/search?criteria=(click_id_Alanbase:equals:${clickId})`,
-        { headers }
-      );
-      const contact = contactResp.data?.data?.[0];
-      if (!contact) throw new Error('Контакт не найден');
+      // Ищем контакт по click_id или email
+      const contact = await findContact(clickId, email, headers);
+      if (!contact) {
+        throw new Error('Контакт не найден ни по click_id, ни по email');
+      }
 
-      const dealsResp = await axios.get(
-        `https://www.zohoapis.eu/crm/v2/Deals/search?criteria=(Contact_Name:equals:${contact.id})`,
-        { headers }
-      );
-      const deal = dealsResp.data?.data?.[0];
-      if (!deal) throw new Error('Retention-сделка не найдена');
+      // Ищем сделку для контакта
+      const deal = await findDeal(contact.id, clickId, email, headers);
+      if (!deal) {
+        throw new Error('Retention-сделка не найдена для контакта');
+      }
 
       const module = type === 'redeposit' ? 'deposits' : 'withdrawals';
       const name = `${type === 'redeposit' ? 'Повторный депозит' : 'Вывод'} на сумму ${amount || value}`;
@@ -192,7 +291,7 @@ app.get('/api/alanbase', async (req, res) => {
             contact: contact.id,
             Retention: deal.id,
             Currency: currency,
-            Email: const2
+            Email: email
           }]
         },
         { headers }
@@ -205,7 +304,11 @@ app.get('/api/alanbase', async (req, res) => {
     res.status(400).json({ success: false, error: 'Неизвестный тип события' });
   } catch (error) {
     console.error('Ошибка обработки запроса:', error?.response?.data || error.message);
-    res.status(500).json({ success: false, error: error?.response?.data || error.message });
+    res.status(500).json({ 
+      success: false, 
+      error: error?.response?.data || error.message,
+      details: error.message 
+    });
   }
 });
 
