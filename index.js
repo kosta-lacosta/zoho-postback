@@ -154,8 +154,9 @@ app.get('/api/alanbase', async (req, res) => {
     }
 
     if (type === 'deposit') {
-      const contact = await findContact(clickId, email, headers);
-      const deal = await findDeal(contact?.id, clickId, email, headers);
+      let contact = await findContact(clickId, email, headers);
+      let deal = await findDeal(contact?.id, clickId, email, headers);
+      let lead = await findLead(clickId, email, headers);
 
       if (contact && deal) {
         const depositResp = await axios.post('https://www.zohoapis.eu/crm/v2/deposits', {
@@ -171,42 +172,45 @@ app.get('/api/alanbase', async (req, res) => {
         return res.json({ success: true, deposit: depositResp.data });
       }
 
-      const lead = await findLead(clickId, email, headers);
       if (!lead) throw new Error('Не найден ни контакт, ни лид');
 
       await axios.put('https://www.zohoapis.eu/crm/v2/Leads', {
         data: [{ id: lead.id, Status: 'FTD' }]
       }, { headers });
 
-      const contactResp = await axios.post('https://www.zohoapis.eu/crm/v2/Contacts', {
-        data: [{
-          Last_Name: generateContactName(lead, clickId),
-          Email: isValidEmail(lead.Email) ? lead.Email : undefined,
-          First_Name: lead.First_Name,
-          click_id_Alanbase: clickId
-        }]
-      }, { headers });
-      const contactId = contactResp.data.data[0].details.id;
+      if (!contact) {
+        const contactResp = await axios.post('https://www.zohoapis.eu/crm/v2/Contacts', {
+          data: [{
+            Last_Name: generateContactName(lead, clickId),
+            Email: isValidEmail(lead.Email) ? lead.Email : undefined,
+            First_Name: lead.First_Name,
+            click_id_Alanbase: clickId
+          }]
+        }, { headers });
+        contact = { id: contactResp.data.data[0].details.id };
+      }
 
-      const dealResp = await axios.post('https://www.zohoapis.eu/crm/v2/Deals', {
-        data: [{
-          Deal_Name: `Retention Deal ${clickId}`,
-          Stage: '0. FIRST DEPOSIT',
-          Amount: Number(amount || value),
-          Currency: currency,
-          Contact_Name: contactId,
-          Email: isValidEmail(lead.Email) ? lead.Email : undefined,
-          click_id_Alanbase: clickId
-        }]
-      }, { headers });
-      const dealId = dealResp.data.data[0].details.id;
+      if (!deal) {
+        const dealResp = await axios.post('https://www.zohoapis.eu/crm/v2/Deals', {
+          data: [{
+            Deal_Name: `Retention Deal ${clickId}`,
+            Stage: '0. FIRST DEPOSIT',
+            Amount: Number(amount || value),
+            Currency: currency,
+            Contact_Name: contact.id,
+            Email: isValidEmail(lead.Email) ? lead.Email : undefined,
+            click_id_Alanbase: clickId
+          }]
+        }, { headers });
+        deal = { id: dealResp.data.data[0].details.id };
+      }
 
       const depositResp = await axios.post('https://www.zohoapis.eu/crm/v2/deposits', {
         data: [{
           Name: `Депозит на сумму ${amount || value}`,
           amount: Number(amount || value),
-          contact: contactId,
-          Retention: dealId,
+          contact: contact.id,
+          Retention: deal.id,
           lead: lead.id,
           Currency: currency,
           Email: isValidEmail(lead.Email) ? lead.Email : undefined,
@@ -214,7 +218,7 @@ app.get('/api/alanbase', async (req, res) => {
         }]
       }, { headers });
 
-      return res.json({ success: true, createdContact: contactId, createdDeal: dealId, deposit: depositResp.data });
+      return res.json({ success: true, createdContact: contact.id, createdDeal: deal.id, deposit: depositResp.data });
     }
 
     if (type === 'redeposit' || type === 'withdrawal') {
