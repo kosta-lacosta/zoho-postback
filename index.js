@@ -234,7 +234,7 @@ app.get('/api/alanbase', async (req, res) => {
         const updateResp = await axios.put(
           'https://www.zohoapis.eu/crm/v2/Leads',
           {
-            data: [{ id: lead.id, Status: 'Registered' }]
+            data: [{ id: lead.id, Lead_Status: 'Registered' }]
           },
           { headers }
         );
@@ -247,7 +247,7 @@ app.get('/api/alanbase', async (req, res) => {
               Last_Name: email || `Reg ${clickId}`,
               click_id_Alanbase: clickId,
               amount: amount || value || 0,
-              Status: 'Registered',
+              Lead_Status: 'Registered',
               Currency: currency,
               type: 'registration',
               Email: email
@@ -271,7 +271,7 @@ app.get('/api/alanbase', async (req, res) => {
           First_Name: lead.First_Name,
           Email: lead.Email,
           click_id_Alanbase: lead.click_id_Alanbase,
-          Status: lead.Status
+          Lead_Status: lead.Lead_Status
         });
 
         // Валидируем данные перед конвертацией
@@ -285,7 +285,7 @@ app.get('/api/alanbase', async (req, res) => {
         await axios.put(
           'https://www.zohoapis.eu/crm/v2/Leads',
           {
-            data: [{ id: lead.id, Status: 'FTD' }]
+            data: [{ id: lead.id, Lead_Status: 'FTD' }]
           },
           { headers }
         );
